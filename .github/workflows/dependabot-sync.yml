@@ -1,0 +1,133 @@
+.github/workflows/dependabot-sync.yml
+name: Dependabot Sync
+
+on:
+  schedule:
+    - cron: "17 4 * * *"   # every day at 04:17 UTC
+  workflow_dispatch:       # allow manual run from the Actions tab
+
+permissions:
+  contents: write          # commit changes
+  security-events: read    # read Dependabot alerts
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Pull Dependabot alerts and write summary + badge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}   # owner/repo
+        run: |
+          set -euo pipefail
+          mkdir -p Security/badges
+
+          python - <<'PY'
+          import json, os, sys, datetime, urllib.request
+          import urllib.parse
+
+          token = os.environ.get("GITHUB_TOKEN","")
+          repo = os.environ["REPO"]  # "owner/name"
+
+          url = f"https://api.github.com/repos/{repo}/dependabot/alerts?per_page=100"
+          req = urllib.request.Request(url, headers={
+              "Accept":"application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version":"2022-11-28",
+              "User-Agent":"kingdomos-dependabot-sync"
+          })
+          with urllib.request.urlopen(req) as r:
+            data = r.read().decode()
+          alerts = json.loads(data)
+
+          # Tally severities
+          sev = {"critical":0,"high":0,"moderate":0,"medium":0,"low":0}
+          for a in alerts:
+              s = ((a.get("security_advisory") or {}).get("severity","") or "").lower()
+              if s in sev: sev[s] += 1
+          total = len(alerts)
+          crit = sev.get("critical",0)
+          high = sev.get("high",0)
+          med  = sev.get("moderate",0)+sev.get("medium",0)
+          low  = sev.get("low",0)
+
+          # Write JSON + Markdown
+          ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+          latest_json = "Security/dependabot_latest.json"
+          latest_md   = "Security/dependabot_latest.md"
+          snap_json   = f"Security/dependabot_{ts}.json"
+          snap_md     = f"Security/dependabot_{ts}.md"
+
+          os.makedirs("Security", exist_ok=True)
+          with open(snap_json,"w") as f: json.dump(alerts, f, indent=2)
+          with open(latest_json,"w") as f: json.dump(alerts, f, indent=2)
+
+          md = []
+          md.append(f"# Dependabot Summary ({repo})")
+          md.append(f"- Fetched (UTC): {datetime.datetime.utcnow().isoformat(timespec='seconds')}Z")
+          md.append(f"- Total alerts: {total}")
+          md.append(f"- Critical: {crit} | High: {high} | Medium: {med} | Low: {low}")
+          md.append("")
+          md.append("## Top alerts")
+          for a in alerts[:30]:
+              pkg = (((a.get("dependency") or {}).get("package") or {}).get("name") or "?")
+              s   = ((a.get("security_advisory") or {}).get("severity") or "?").lower()
+              summ= ((a.get("security_advisory") or {}).get("summary") or "").replace("\n"," ")
+              md.append(f"- [{s}] {pkg} — {summ}")
+          text = "\n".join(md)
+
+          with open(snap_md,"w") as f: f.write(text)
+          with open(latest_md,"w") as f: f.write(text)
+
+          # Create a simple badge SVG (red if crit/high > 0)
+          color = "success"
+          label = "Dependabot"
+          value = f"{crit+high} high+"
+          if crit+high > 0:
+              color = "red"
+          elif med > 0:
+              color = "orange"
+          elif low > 0:
+              color = "yellow"
+          else:
+              value = "0 issues"
+
+          svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="170" height="20" role="img" aria-label="{label}: {value}">
+            <linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+            <mask id="m"><rect width="170" height="20" rx="3" fill="#fff"/></mask>
+            <g mask="url(#m)">
+              <rect width="100" height="20" fill="#555"/>
+              <rect x="100" width="70" height="20" fill="#{ 'e05d44' if color=='red' else 'dfb317' if color=='yellow' else 'fe7d37' if color=='orange' else '4c1' }"/>
+              <rect width="170" height="20" fill="url(#s)"/>
+            </g>
+            <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+              <text x="50" y="15" fill="#010101" fill-opacity=".3">{label}</text>
+              <text x="50" y="14">{label}</text>
+              <text x="135" y="15" fill="#010101" fill-opacity=".3">{value}</text>
+              <text x="135" y="14">{value}</text>
+            </g>
+          </svg>'''
+          with open("Security/badges/dependabot.svg","w") as f: f.write(svg)
+          PY
+
+      - name: Commit changes (if any)
+        run: |
+          set -e
+          git config user.name  "kingdomos-bot"
+          git config user.email "bot@kingdomos.local"
+          git add Security/
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore(security): refresh Dependabot summary + badge"
+            git push
+          fi
+![Dependabot](Security/badges/dependabot.svg)
