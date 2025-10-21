@@ -1,2 +1,3 @@
 # Kingdom-OS
- “Living System for Spirit, Word, and Body Management”
+
+“Living System for Spirit, Word, and Body Management”
