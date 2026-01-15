@@ -12,11 +12,23 @@ $atk = "maps\20-activate-the-kingdom\README.md"
 
 function Fail([string]$m){ Write-Error $m; exit 1 }
 
+$min = 400
+$ban = @(
+  "Paste the ",
+  "PASTE THE FULL",
+  "Include:",
+  "...paste directives..."
+)
+
 foreach ($f in @($gfo,$atk)) {
   if (-not (Test-Path $f)) { Fail "Missing: $f" }
   $raw = Get-Content $f -Raw
-  if ($raw.Trim().Length -lt 400) { Fail "Too small (<400 chars): $f (paste real directives)" }
-  if ($raw -match 'Paste the ') { Fail "Template marker still present: $f" }
+
+  if ($raw.Trim().Length -lt $min) { Fail "Too small (<$min chars): $f (paste real directives)" }
+
+  foreach ($b in $ban) {
+    if ($raw -like "*$b*") { Fail "Placeholder text present ($b): $f" }
+  }
 }
 
 Write-Host "OK: repo + directives present"
