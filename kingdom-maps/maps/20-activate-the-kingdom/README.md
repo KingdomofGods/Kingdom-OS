@@ -1,6 +1,3 @@
-PASTE THE FULL ACTIVATE THE KINGDOM DIRECTIVES HERE.
-Include:
-- Mission
-- Kingdom principles
-- Maps taxonomy
-- Cadence (daily/weekly)
+# Activate the Kingdom Map (Source of Truth)
+
+REPLACE THIS ENTIRE FILE with the Activate the Kingdom directives.
