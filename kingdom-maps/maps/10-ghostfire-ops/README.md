@@ -1,4 +1,11 @@
-# Ghostfire Ops Map (Source of Truth)
+# Ghostfire Ops Map (SOURCE OF TRUTH)
 
-REPLACE THIS ENTIRE FILE with the Ghostfire Ops directives.
+REPLACE THIS ENTIRE FILE.
 
+Minimum required sections:
+- Mission
+- Authority model
+- Operating cadence (daily/weekly)
+- Deterministic workflows (PowerShell-first)
+- Guardrails (what we refuse)
+- Release protocol (public-facing)
